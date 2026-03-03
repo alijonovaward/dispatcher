@@ -37,6 +37,11 @@ class DBService:
             rows = await conn.fetch("SELECT * FROM operators")
             return [Operator(**dict(row)) for row in rows]
 
+    async def get_operator_by_workstation_id(self, workstation_id: int) -> Operator:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM operators WHERE workstation_id = $1", workstation_id)
+            return Operator(**dict(row)) if row else None
+
     # --- Audio ---
     async def insert_audio(self, audio: Audio):
         async with self.pool.acquire() as conn:

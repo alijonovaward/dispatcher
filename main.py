@@ -1,18 +1,28 @@
 from fastapi import FastAPI, Depends, Request
-from models import Webhook
+from models import Webhook, Audio, AudioStatus
 from db_services import DBService
 import asyncpg
 import httpx
+import json
 
 app = FastAPI()
 
 DATABASE_URL = "postgresql://bank:bank@localhost:5432/bank"
 
 
-# --- DB pool ---
+db_pool = None
+
+@app.on_event("startup")
+async def startup():
+    global db_pool
+    db_pool = await asyncpg.create_pool(DATABASE_URL)
+
+@app.on_event("shutdown")
+async def shutdown():
+    await db_pool.close()
+
 async def get_db():
-    pool = await asyncpg.create_pool(DATABASE_URL)
-    return DBService(pool)
+    return DBService(db_pool)
 
 
 @app.post("/webhook")
@@ -24,37 +34,30 @@ async def webhook_handler(request: Request, db: DBService = Depends(get_db)):
     action = data["data"]["actionType"]
 
     if action == "Accept":
-        await db.insert_webhook()
+        webhook = Webhook(
+            id=data["id"],
+            branch_id=branch_id,
+            workstation_id=workstation_id,
+            rawdata = json.dumps(data)
+        )
+
+        is_created = await db.get_webhook_by_id(webhook.id)
+        # if is_created:
+        #     return {"status": "already exist"}
+
+        await db.insert_webhook(webhook)
+        operator = await db.get_operator_by_workstation_id(workstation_id)
+
+        audio = Audio(
+            id=data["id"],
+            operator_id=operator.id,
+            audio="file path",
+            status=AudioStatus.started
+        )
+        await db.insert_audio(audio)
+
+        return {"status": "created", "operator": operator}
     elif action == "End":
-        pass
+        return {"actionType" : "End"}
 
-    await db.insert_webhook(data)
-
-    # 2️⃣ Operator topish
-    operators = await db.get_operators()
-
-    operator = None
-    for op in operators:
-        if op.branch_id == data.branch_id and op.workstation_id == data.workstation_id:
-            operator = op
-            break
-
-    if not operator:
-        return {"status": "operator not found"}
-
-    url = f"http://{operator.laptopIp}:{operator.laptopPort}/{action}"
-
-    # 4️⃣ Operator kompyuterga request yuborish
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url)
-
-        return {
-            "status": "sent",
-            "operator": operator.id,
-            "action": action,
-            "response": response.text
-        }
-
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+    return {"status": "ok"}
