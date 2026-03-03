@@ -16,7 +16,7 @@ CREATE TABLE operators (
 );
 
 -- Audio table
-CREATE TABLE audio (
+CREATE TABLE audios (
     id INT PRIMARY KEY,
     operator_id INT NOT NULL,
     audio TEXT NOT NULL,
