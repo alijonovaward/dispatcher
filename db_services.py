@@ -19,6 +19,11 @@ class DBService:
             rows = await conn.fetch("SELECT * FROM webhooks")
             return [Webhook(**dict(row)) for row in rows]
 
+    async def get_webhook_by_id(self, webhook_id: int) -> Webhook:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM webhooks WHERE id = $1", webhook_id)
+            return Webhook(**dict(row)) if row else None
+
     # --- Operators ---
     async def insert_operator(self, operator: Operator):
         async with self.pool.acquire() as conn:
