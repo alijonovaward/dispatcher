@@ -11,7 +11,7 @@ class DBService:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO webhooks (id, branch_id, workstation_id, rawdata) VALUES ($1,$2,$3,$4)",
-                webhook.id, webhook.branchId, webhook.workstationId, webhook.rawdata
+                webhook.id, webhook.branch_id, webhook.workstation_id, webhook.rawdata
             )
 
     async def get_webhooks(self) -> List[Webhook]:
@@ -24,7 +24,7 @@ class DBService:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO operators (id, branch_id, workstation_id, laptop_ip, laptop_port) VALUES ($1,$2,$3,$4,$5)",
-                operator.id, operator.branchId, operator.workstationId, operator.laptopIp, operator.laptopPort
+                operator.id, operator.branch_id, operator.workstation_id, operator.laptop_ip, operator.laptop_port
             )
 
     async def get_operators(self) -> List[Operator]:
@@ -37,7 +37,7 @@ class DBService:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO audio (id, operator_id, audio, status) VALUES ($1,$2,$3,$4)",
-                audio.id, audio.operatorId, audio.audio, audio.status.value
+                audio.id, audio.operator_id, audio.audio, audio.status.value
             )
 
     async def get_audios(self) -> List[Audio]:
