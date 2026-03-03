@@ -36,11 +36,11 @@ class DBService:
     async def insert_audio(self, audio: Audio):
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO audio (id, operator_id, audio, status) VALUES ($1,$2,$3,$4)",
+                "INSERT INTO audios (id, operator_id, audio, status) VALUES ($1,$2,$3,$4)",
                 audio.id, audio.operator_id, audio.audio, audio.status.value
             )
 
     async def get_audios(self) -> List[Audio]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM audio")
+            rows = await conn.fetch("SELECT * FROM audios")
             return [Audio(**dict(row)) for row in rows]
