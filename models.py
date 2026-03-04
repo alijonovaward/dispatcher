@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 from enum import Enum
 
 class Webhook(BaseModel):
@@ -8,7 +9,7 @@ class Webhook(BaseModel):
     rawdata: str
 
 class Operator(BaseModel):
-    id: int
+    id: Optional[int] = None
     branch_id: int
     workstation_id: int
     laptop_ip: str
@@ -20,8 +21,8 @@ class AudioStatus(str, Enum):
     uploaded = "uploaded"
 
 class Audio(BaseModel):
-    id: int
+    id: Optional[int] = None
     operator_id: int
     webhook_id: int
-    audio: str
+    audio: Optional[str] = None
     status:AudioStatus = AudioStatus.started

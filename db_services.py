@@ -28,8 +28,8 @@ class DBService:
     async def insert_operator(self, operator: Operator):
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO operators (id, branch_id, workstation_id, laptop_ip, laptop_port) VALUES ($1,$2,$3,$4,$5)",
-                operator.id, operator.branch_id, operator.workstation_id, operator.laptop_ip, operator.laptop_port
+                "INSERT INTO operators (branch_id, workstation_id, laptop_ip, laptop_port) VALUES ($1,$2,$3,$4)",
+                operator.branch_id, operator.workstation_id, operator.laptop_ip, operator.laptop_port
             )
 
     async def get_operators(self) -> List[Operator]:
@@ -46,8 +46,8 @@ class DBService:
     async def insert_audio(self, audio: Audio):
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO audios (id, operator_id, audio, status) VALUES ($1,$2,$3,$4)",
-                audio.id, audio.operator_id, audio.audio, audio.status.value
+                "INSERT INTO audios (operator_id, webhook_id, status) VALUES ($1,$2,$3)",
+                audio.operator_id, audio.webhook_id, audio.status.value
             )
 
     async def get_audios(self) -> List[Audio]:
