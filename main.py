@@ -1,22 +1,29 @@
 from fastapi import Depends, Request
+from fastapi import UploadFile, File, Form
 from models import Webhook, Audio, AudioStatus
 from db_services import DBService
 import asyncpg
-import httpx
 import json
 import requests
 from fastapi import FastAPI, UploadFile, File
 import os
 from datetime import datetime
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    filename="app.log",
+    filemode="a"
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-UPLOAD_DIR = "received_files"
+UPLOAD_DIR = datetime.now().strftime("%d_%m_%Y")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 DATABASE_URL = "postgresql://bank:bank@localhost:5432/bank"
-
 
 db_pool = None
 
@@ -35,52 +42,67 @@ async def get_db():
 
 @app.post("/webhook")
 async def webhook_handler(request: Request, db: DBService = Depends(get_db)):
-    data = await request.json()
+    webhook_id = None
+    try:
+        data = await request.json()
 
-    branch_id = data["branchId"]
-    workstation_id = data["workstationId"]
-    action = data["data"]["actionType"]
-    operator = await db.get_operator_by_workstation_id(workstation_id)
+        webhook_id = data.get("id", 1)
+        branch_id = data.get("branchId", 1)
+        workstation_id = data.get("workstationId", 1)
+        action = data.get("data", {}).get("actionType", "NoAction")
 
-    if action == "Accept":
-        webhook = Webhook(
-            id=data["id"],
-            branch_id=branch_id,
-            workstation_id=workstation_id,
-            rawdata = json.dumps(data)
-        )
+        logger.info(f"webhook id: {webhook_id} branch_id: {branch_id} workstation_id: {workstation_id} action: {action}")
+        operator = await db.get_operator_by_workstation_id(workstation_id)
 
-        await db.insert_webhook(webhook)
+        if action == "Accept":
+            webhook = Webhook(
+                id=webhook_id,
+                branch_id=branch_id,
+                workstation_id=workstation_id,
+                rawdata = json.dumps(data)
+            )
 
-        audio = Audio(
-            operator_id=operator.id,
-            webhook_id=webhook.id,
-            status=AudioStatus.started
-        )
-        await db.insert_audio(audio)
+            await db.insert_webhook(webhook)
 
-        url = f"http://{operator.laptop_ip}:{operator.laptop_port}/start"
-        response = requests.post(url, params={"record_id": data["id"]})
+            audio = Audio(
+                operator_id=operator.id,
+                webhook_id=webhook.id,
+                status=AudioStatus.started
+            )
+            await db.insert_audio(audio)
 
-        return {"status": "created", "audio": audio.id}
-    elif action == "End":
-        audio = await db.get_audio_by_webhook_id(data["id"])
+            url = f"http://{operator.laptop_ip}:{operator.laptop_port}/start"
+            response = requests.post(url, params={"record_id": webhook_id})
 
-        url = f"http://{operator.laptop_ip}:{operator.laptop_port}/stop"
-        response = requests.post(url)
+            if response.status_code == 200:
+                logger.info(f"webhook id: {webhook_id} audio recording started")
+                return {"status": "started"}
 
-        audio.status = AudioStatus.stopped
-        await db.update_audio(audio)
+            return {"status": "An error occured processing audio recording start"}
+        elif action == "End":
+            audio = await db.get_audio_by_webhook_id(webhook_id)
+            if not audio:
+                return {"status": f"{webhook_id} audio not started"}
+            url = f"http://{operator.laptop_ip}:{operator.laptop_port}/stop"
+            response = requests.post(url)
+            print(response.text)
 
+            audio.status = AudioStatus.stopped
+            await db.update_audio(audio)
 
+            if response.status_code == 200:
+                logger.info(f"webhook id: {webhook_id} audio recording succesfully ended")
+                return {"status": "Success to stop audio recording"}
+            return {"status": "An error occured processing audio recording succesfully ended"}
+    except Exception as e:
+        logger.exception(f"Webhook processing error. webhook_id={webhook_id}")
+        return {"status": "error", "message": str(e)}
 
-        return {"status": "stopped audio", "audio": audio.id}
     return {"status": "ok"}
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{timestamp}_{file.filename}"
+async def upload_file(file: UploadFile = File(...), record_id: str = Form(...), db: DBService = Depends(get_db)):
+    filename = f"{file.filename}"
 
     file_path = os.path.join(UPLOAD_DIR, filename)
 
@@ -90,8 +112,15 @@ async def upload_file(file: UploadFile = File(...)):
             if not chunk:
                 break
             f.write(chunk)
+    audio = await db.get_audio_by_webhook_id(int(record_id))
+    audio.audio = file_path
+    await db.update_audio(audio)
+
+    logging.info(f"File saved: {filename} record_id={record_id}")
 
     return {
+        "status_code": 200,
         "status": "saved",
+        "record_id": record_id,
         "filename": filename
     }
