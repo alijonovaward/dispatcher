@@ -54,3 +54,12 @@ class DBService:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM audios")
             return [Audio(**dict(row)) for row in rows]
+
+    async def get_audio_by_webhook_id(self, webhook_id: int) -> Audio:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM audios WHERE webhook_id = $1", webhook_id)
+            return Audio(**dict(row)) if row else None
+
+    async def update_audio(self, audio: Audio):
+        async with self.pool.acquire() as conn:
+            await conn.execute("UPDATE audios SET status = $1 WHERE id = $2", audio.status, audio.id)
