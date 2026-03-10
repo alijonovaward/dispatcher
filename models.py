@@ -19,6 +19,7 @@ class AudioStatus(str, Enum):
     started = "started"
     stopped = "stopped"
     uploaded = "uploaded"
+    not_detected = "not_detected"
 
 class Audio(BaseModel):
     id: Optional[int] = None

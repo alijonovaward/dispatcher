@@ -45,10 +45,11 @@ class DBService:
     # --- Audio ---
     async def insert_audio(self, audio: Audio):
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO audios (operator_id, webhook_id, status) VALUES ($1,$2,$3)",
+            row = await conn.fetchrow(
+                "INSERT INTO audios (operator_id, webhook_id, status) VALUES ($1,$2,$3) RETURNING id",
                 audio.operator_id, audio.webhook_id, audio.status.value
             )
+            audio.id = row["id"]
 
     async def get_audios(self) -> List[Audio]:
         async with self.pool.acquire() as conn:
@@ -62,4 +63,4 @@ class DBService:
 
     async def update_audio(self, audio: Audio):
         async with self.pool.acquire() as conn:
-            await conn.execute("UPDATE audios SET status = $1 WHERE id = $2", audio.status, audio.id)
+            await conn.execute("UPDATE audios SET status = $1, audio = $2 WHERE id = $3", audio.status.value, audio.audio, audio.id)

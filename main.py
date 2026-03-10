@@ -9,6 +9,7 @@ from fastapi import FastAPI, UploadFile, File
 import os
 from datetime import datetime
 import logging
+import httpx
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,20 +73,29 @@ async def webhook_handler(request: Request, db: DBService = Depends(get_db)):
             await db.insert_audio(audio)
 
             url = f"http://{operator.laptop_ip}:{operator.laptop_port}/start"
-            response = requests.post(url, params={"record_id": webhook_id})
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, params={"record_id": webhook_id})
 
-            if response.status_code == 200:
+            res_data = response.json()
+            print(res_data)
+
+            if res_data["status_code"] == 200:
                 logger.info(f"webhook id: {webhook_id} audio recording started")
                 return {"status": "started"}
+            elif res_data["status_code"] == 201:
+                audio.status = AudioStatus.not_detected
+                await db.update_audio(audio)
+                logger.info(f"webhook id: {audio.id} {webhook_id} audio recording not started, because microphone no detected")
+                return {"status": res_data["status"]}
 
-            return {"status": "An error occured processing audio recording start"}
+            return {"status": res_data["status"]}
         elif action == "End":
             audio = await db.get_audio_by_webhook_id(webhook_id)
             if not audio:
                 return {"status": f"{webhook_id} audio not started"}
             url = f"http://{operator.laptop_ip}:{operator.laptop_port}/stop"
-            response = requests.post(url)
-            print(response.text)
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url)
 
             audio.status = AudioStatus.stopped
             await db.update_audio(audio)
@@ -113,7 +123,9 @@ async def upload_file(file: UploadFile = File(...), record_id: str = Form(...), 
                 break
             f.write(chunk)
     audio = await db.get_audio_by_webhook_id(int(record_id))
-    audio.audio = file_path
+    print(file_path)
+    audio.audio = str(file_path)
+    audio.status = AudioStatus.uploaded
     await db.update_audio(audio)
 
     logging.info(f"File saved: {filename} record_id={record_id}")
